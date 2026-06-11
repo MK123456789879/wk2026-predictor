@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { pinToken } from "./lib/pin-auth";
+import { env } from "./lib/env";
 
 const OPEN = ["/pin", "/api/pin"];
 
 export async function middleware(request) {
-  const webPin = process.env.WEB_PIN;
+  const webPin = env("WEB_PIN");
   if (!webPin) return NextResponse.next();
 
   const { pathname } = request.nextUrl;

@@ -1,10 +1,11 @@
 import { cookies } from "next/headers";
 import { pinToken } from "../../../lib/pin-auth";
+import { env } from "../../../lib/env";
 
 export const runtime = "nodejs";
 
 export async function POST(req) {
-  const expected = process.env.WEB_PIN;
+  const expected = env("WEB_PIN");
   if (!expected) {
     return Response.json({ error: "WEB_PIN niet geconfigureerd" }, { status: 500 });
   }

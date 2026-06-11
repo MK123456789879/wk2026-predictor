@@ -104,6 +104,8 @@ const css=`
 .odd.on .o-l{color:#04130a;}
 .odd .o-v{font-family:'Space Mono',monospace;font-weight:700;font-size:14px;margin-top:1px;}
 .odd.on .o-v{color:#04130a;}
+.verwacht{margin-top:8px;text-align:center;font-size:12px;color:var(--mut);}
+.verwacht b{font-family:'Space Mono',monospace;color:var(--gr);font-weight:700;}
 .ai{margin-top:10px;padding:9px 11px;border-radius:9px;background:var(--s2);border:1px solid var(--ln);font-size:13px;display:flex;gap:8px;align-items:flex-start;color:var(--tx);}
 .ai .adv{font-family:'Space Mono',monospace;color:var(--gr);font-weight:700;}
 .unk{color:var(--ver);font-size:11px;font-family:'Space Mono',monospace;}
@@ -126,6 +128,9 @@ input[type=range]{width:100%;accent-color:var(--gr);}
 .sv .k{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--gr);margin:0 0 6px;display:flex;align-items:center;gap:7px;font-weight:700;}
 .tabel{width:100%;border-collapse:collapse;font-size:13px;}
 .tabel th{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);text-align:right;padding:6px 7px;border-bottom:1px solid var(--ln);}
+.tabel th.srt{cursor:pointer;user-select:none;}
+.tabel th.srt:hover{color:var(--tx);}
+.tabel th.srt.on{color:var(--gr);}
 .tabel th.l,.tabel td.l{text-align:left;}
 .tabel td{padding:7px;border-bottom:1px solid #161d26;font-family:'Space Mono',monospace;}
 .tabel td.nm2{font-family:'Inter';font-weight:600;}
@@ -217,6 +222,7 @@ export default function WK() {
   const [graph, setGraph] = useState({});       // key -> data | {error}
   const [graphOpen, setGraphOpen] = useState({}); // key -> bool
   const [graphBusy, setGraphBusy] = useState("");
+  const [krachtSort, setKrachtSort] = useState({ col: "net", dir: "desc" });
 
   useEffect(() => {
     (async () => {
@@ -369,6 +375,7 @@ export default function WK() {
           <div className={"odd" + (uit === "X" ? " on" : "")} onClick={() => kiesUitkomst(p, "X")}><div className="o-l">X</div><div className="o-v">{odds(p.pg)}</div></div>
           <div className={"odd" + (uit === "2" ? " on" : "")} onClick={() => kiesUitkomst(p, "2")}><div className="o-l">2</div><div className="o-v">{odds(p.pb)}</div></div>
         </div>
+        <div className="verwacht">Verwacht: <b>{p.sa}–{p.sb}</b></div>
         {!p.bekend && <div className="unk" style={{ marginTop: 6 }}>weinig historie — minder betrouwbaar</div>}
         {a && <div className="ai"><Sparkles size={15} color="#16c66a" style={{ flexShrink: 0, marginTop: 1 }} /><span><span className="adv">{a.t}–{a.u}</span> · {a.reden}</span><button className="btn" style={{ marginLeft: "auto", padding: "3px 9px", fontSize: 12 }} onClick={() => gebruikAi(p.nr)}>kies</button></div>}
         <Insight p={p} />
@@ -378,6 +385,29 @@ export default function WK() {
 
   function StandTabel({ rij }) {
     return (<table className="tabel"><thead><tr><th className="l">#</th><th className="l">Land</th><th>Pt</th><th>+/-</th></tr></thead><tbody>{rij.map((r, i) => (<tr key={r.team} className={i < 2 ? "q" : i === 2 ? "q3" : "out"}><td className="l">{i + 1}</td><td className="nm2 l"><Flag name={r.team} cls="" /> {r.team}</td><td>{r.pt}</td><td>{r.gs >= 0 ? "+" : ""}{r.gs}</td></tr>))}</tbody></table>);
+  }
+
+  const krachtRijen = useMemo(() => {
+    if (!model) return [];
+    const rows = LETTERS.flatMap((g) => GROEPEN[g]).map((t) => {
+      const r = getRating(model, t);
+      return { t, aan: r ? r.aanval : null, ver: r ? r.verdediging : null, net: r ? r.aanval - r.verdediging : -99 };
+    });
+    const mul = krachtSort.dir === "desc" ? -1 : 1;
+    return [...rows].sort((a, b) => mul * ((a[krachtSort.col] ?? -999) - (b[krachtSort.col] ?? -999)));
+  }, [model, krachtSort]);
+
+  function klikKrachtSort(col) {
+    setKrachtSort((s) => (s.col === col ? { col, dir: s.dir === "desc" ? "asc" : "desc" } : { col, dir: "desc" }));
+  }
+
+  function KrachtTh({ col, label }) {
+    const on = krachtSort.col === col;
+    return (
+      <th className={"srt" + (on ? " on" : "")} onClick={() => klikKrachtSort(col)}>
+        {label}{on ? (krachtSort.dir === "desc" ? " ▼" : " ▲") : ""}
+      </th>
+    );
   }
 
   return (
@@ -440,6 +470,7 @@ export default function WK() {
                       <div className="side r"><Flag name={p.B} /><span className={"nm" + (p.winnaar === p.B ? " win" : "")}>{p.B}</span></div>
                     </div>
                     <div className="odds"><div className={"odd" + (p.pa >= p.pb ? " on" : "")}><div className="o-l">1</div><div className="o-v">{odds(p.pa)}</div></div><div className="odd"><div className="o-l">X</div><div className="o-v">{odds(p.pg)}</div></div><div className={"odd" + (p.pb > p.pa ? " on" : "")}><div className="o-l">2</div><div className="o-v">{odds(p.pb)}</div></div></div>
+                    <div className="verwacht">Verwacht: <b>{p.sa}–{p.sb}</b></div>
                     {a && <div className="ai"><Sparkles size={15} color="#16c66a" style={{ flexShrink: 0, marginTop: 1 }} /><span><span className="adv">{a.t}–{a.u}</span> · {a.reden}</span></div>}
                     <Insight p={p} />
                   </div>
@@ -455,8 +486,8 @@ export default function WK() {
                   <label className="chk"><input type="checkbox" checked={weeg} onChange={(e) => setWeeg(e.target.checked)} />Vriendschappelijke wedstrijden lager wegen</label>
                 </div>
                 <div className="gkop">Krachtenlijst (uit je historie)</div>
-                <table className="tabel"><thead><tr><th className="l">#</th><th className="l">Land</th><th>Aanval</th><th>Verded.</th><th>Net</th></tr></thead><tbody>
-                  {LETTERS.flatMap((g) => GROEPEN[g]).map((t) => { const r = getRating(model, t); return { t, aan: r ? r.aanval : null, ver: r ? r.verdediging : null, net: r ? r.aanval - r.verdediging : -99 }; }).sort((a, b) => b.net - a.net).map((r, i) => (
+                <table className="tabel"><thead><tr><th className="l">#</th><th className="l">Land</th><KrachtTh col="aan" label="Aanval" /><KrachtTh col="ver" label="Verded." /><KrachtTh col="net" label="Net" /></tr></thead><tbody>
+                  {krachtRijen.map((r, i) => (
                     <tr key={r.t}><td className="l">{i + 1}</td><td className="nm2 l"><Flag name={r.t} /> {r.t}</td><td>{r.aan != null ? r.aan.toFixed(2) : "—"}</td><td>{r.ver != null ? r.ver.toFixed(2) : "—"}</td><td style={{ color: r.net >= 0 ? "var(--gr)" : "var(--ver)" }}>{r.aan != null ? (r.net >= 0 ? "+" : "") + r.net.toFixed(2) : "—"}</td></tr>
                   ))}
                 </tbody></table>
