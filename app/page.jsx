@@ -150,12 +150,51 @@ input[type=range]{width:100%;accent-color:var(--gr);}
 .sheet h3{margin:0 0 4px;font-size:17px;}
 .slip-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #161d26;font-size:13px;}
 .slip-row .s{margin-left:auto;font-family:'Space Mono',monospace;font-weight:700;color:var(--gr);}
+.gbtn{margin-top:10px;display:inline-flex;align-items:center;gap:6px;background:none;border:1px solid var(--ln);color:var(--mut);border-radius:8px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer;}
+.gbtn:hover{border-color:var(--gr);color:var(--gr);}
+.gpanel{margin-top:10px;border-top:1px solid var(--ln);padding-top:11px;display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:center;}
+@media(max-width:560px){.gpanel{grid-template-columns:1fr;}}
+.gtext{font-size:13px;line-height:1.45;}
+.gtext .big{font-family:'Space Mono',monospace;font-weight:700;font-size:16px;color:var(--tx);}
+.gtext .mut{color:var(--mut);}
+.gtext .keten{margin-top:6px;color:var(--gr);font-size:12px;}
+.gloading{color:var(--mut);font-size:13px;padding:6px 0;}
+.gerr{color:var(--ver);font-size:12px;}
 `;
 
 function Flag({ name, cls }) {
   const iso = FLAG[name];
   if (!iso) return <span className={"flag " + (cls || "")} style={{ display: "inline-block" }} />;
   return <img className={"flag " + (cls || "")} src={`https://flagcdn.com/w40/${iso}.png`} alt="" onError={(e) => (e.target.style.visibility = "hidden")} />;
+}
+
+function kort(name) {
+  const iso = FLAG[name];
+  if (iso) return iso.replace("gb-", "").toUpperCase().slice(0, 3);
+  return name.slice(0, 3).toUpperCase();
+}
+
+// Mini-netwerk: twee landen + onderlinge duels als pijlen
+function MiniGraph({ a, b, aWins, bWins, draws }) {
+  const Node = ({ cx, label }) => (
+    <g>
+      <circle cx={cx} cy={70} r={28} fill="#19212c" stroke="#26313f" strokeWidth="2" />
+      <text x={cx} y={75} textAnchor="middle" fill="#eef2f6" fontFamily="'Space Mono',monospace" fontWeight="700" fontSize="14">{label}</text>
+    </g>
+  );
+  return (
+    <svg viewBox="0 0 320 140" style={{ width: "100%", height: "auto" }}>
+      <defs>
+        <marker id="ag" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#4FB477" /></marker>
+        <marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#D9785C" /></marker>
+      </defs>
+      {aWins > 0 && <><path d="M88,52 C150,34 170,34 232,52" fill="none" stroke="#4FB477" strokeWidth="2" markerEnd="url(#ag)" /><text x="160" y="32" textAnchor="middle" fill="#4FB477" fontFamily="'Space Mono',monospace" fontSize="12" fontWeight="700">{aWins}</text></>}
+      {bWins > 0 && <><path d="M232,88 C170,106 150,106 88,88" fill="none" stroke="#D9785C" strokeWidth="2" markerEnd="url(#ar)" /><text x="160" y="120" textAnchor="middle" fill="#D9785C" fontFamily="'Space Mono',monospace" fontSize="12" fontWeight="700">{bWins}</text></>}
+      {draws > 0 && <><line x1="96" y1="70" x2="224" y2="70" stroke="#D7B36A" strokeWidth="2" strokeDasharray="4 4" /><text x="160" y="66" textAnchor="middle" fill="#D7B36A" fontFamily="'Space Mono',monospace" fontSize="11">{draws}</text></>}
+      <Node cx={48} label={kort(a)} />
+      <Node cx={272} label={kort(b)} />
+    </svg>
+  );
 }
 
 export default function WK() {
@@ -175,6 +214,9 @@ export default function WK() {
   const [slip, setSlip] = useState(false);
   const [kopOk, setKopOk] = useState(false);
   const [laadt, setLaadt] = useState(true);
+  const [graph, setGraph] = useState({});       // key -> data | {error}
+  const [graphOpen, setGraphOpen] = useState({}); // key -> bool
+  const [graphBusy, setGraphBusy] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -256,6 +298,56 @@ export default function WK() {
   }
   async function kopieer() { try { await navigator.clipboard.writeText(csv()); setKopOk(true); setTimeout(() => setKopOk(false), 1500); } catch {} }
 
+  async function toggleGraph(p) {
+    const open = !graphOpen[p.key];
+    setGraphOpen((o) => ({ ...o, [p.key]: open }));
+    if (open && !graph[p.key]) {
+      setGraphBusy(p.key);
+      try {
+        const r = await fetch("/api/graph", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ a: p.A, b: p.B }) });
+        const d = await r.json();
+        setGraph((g) => ({ ...g, [p.key]: r.ok ? d : { error: d.error || "fout" } }));
+      } catch (e) {
+        setGraph((g) => ({ ...g, [p.key]: { error: String(e.message) } }));
+      }
+      setGraphBusy("");
+    }
+  }
+
+  function Insight({ p }) {
+    const open = graphOpen[p.key];
+    const d = graph[p.key];
+    return (
+      <>
+        <button className="gbtn" onClick={() => toggleGraph(p)}>
+          <GitFork size={13} /> {open ? "verberg graph-inzicht" : "graph-inzicht"}
+        </button>
+        {open && (
+          <div className="gpanel">
+            {graphBusy === p.key && <div className="gloading">Graph bevragen…</div>}
+            {d && d.error && <div className="gerr">Graph niet bereikbaar: {d.error}</div>}
+            {d && !d.error && (
+              <>
+                <MiniGraph a={p.A} b={p.B} aWins={d.aWins} bWins={d.bWins} draws={d.draws} />
+                <div className="gtext">
+                  {d.totaal === 0 ? (
+                    <div className="mut">Nog nooit tegen elkaar gespeeld — de Poisson vaart hier blind, jouw eigen inschatting telt dus extra.</div>
+                  ) : (
+                    <>
+                      <div><span className="big">{d.aWins}–{d.draws}–{d.bWins}</span> <span className="mut">(winst {p.A} / gelijk / winst {p.B})</span></div>
+                      <div className="mut">{d.totaal} onderlinge {d.totaal === 1 ? "duel" : "duels"}{d.laatste && d.laatste[0] && (() => { const l = d.laatste[0]; const uit = l.type === "DREW" ? "gelijk" + (l.score ? " " + l.score : "") : `${l.winnaar} won${l.hs != null ? " " + l.hs + "-" + l.as : ""}`; return ` · laatste: ${uit}${l.datum ? " (" + l.datum.slice(0, 4) + ")" : ""}`; })()}</div>
+                    </>
+                  )}
+                  {d.keten && d.keten.length > 2 && <div className="keten">Keten: {d.keten.join(" → ")}</div>}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </>
+    );
+  }
+
   function Fixture({ p }) {
     const [sa, sb] = scoreVan(p.nr, p.sa, p.sb);
     const ed = overrides[p.nr] && (overrides[p.nr].a !== undefined || overrides[p.nr].b !== undefined);
@@ -279,6 +371,7 @@ export default function WK() {
         </div>
         {!p.bekend && <div className="unk" style={{ marginTop: 6 }}>weinig historie — minder betrouwbaar</div>}
         {a && <div className="ai"><Sparkles size={15} color="#16c66a" style={{ flexShrink: 0, marginTop: 1 }} /><span><span className="adv">{a.t}–{a.u}</span> · {a.reden}</span><button className="btn" style={{ marginLeft: "auto", padding: "3px 9px", fontSize: 12 }} onClick={() => gebruikAi(p.nr)}>kies</button></div>}
+        <Insight p={p} />
       </div>
     );
   }
@@ -348,6 +441,7 @@ export default function WK() {
                     </div>
                     <div className="odds"><div className={"odd" + (p.pa >= p.pb ? " on" : "")}><div className="o-l">1</div><div className="o-v">{odds(p.pa)}</div></div><div className="odd"><div className="o-l">X</div><div className="o-v">{odds(p.pg)}</div></div><div className={"odd" + (p.pb > p.pa ? " on" : "")}><div className="o-l">2</div><div className="o-v">{odds(p.pb)}</div></div></div>
                     {a && <div className="ai"><Sparkles size={15} color="#16c66a" style={{ flexShrink: 0, marginTop: 1 }} /><span><span className="adv">{a.t}–{a.u}</span> · {a.reden}</span></div>}
+                    <Insight p={p} />
                   </div>
                 ); })}
               </>
